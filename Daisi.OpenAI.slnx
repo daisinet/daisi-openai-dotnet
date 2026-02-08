@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../daisi-sdk-dotnet/Daisi.SDK/Daisi.SDK.csproj" />
+  <Project Path="Daisi.OpenAI/Daisi.OpenAI.csproj" />
+</Solution>
