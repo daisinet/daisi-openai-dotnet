@@ -133,6 +133,7 @@ public static class ChatCompletionsEndpoint
         string requestId)
     {
         var contentBuilder = new StringBuilder();
+        SendInferenceResponse? lastChunk = null;
 
         await foreach (var chunk in responseStream.ResponseStream.ReadAllAsync(context.RequestAborted))
         {
@@ -140,6 +141,7 @@ public static class ChatCompletionsEndpoint
             {
                 contentBuilder.Append(chunk.Content);
             }
+            lastChunk = chunk;
         }
 
         var cleanedContent = ContentExtractor.CleanResponseContent(contentBuilder.ToString());
@@ -155,6 +157,13 @@ public static class ChatCompletionsEndpoint
         }
 
         var response = ChatResponseMapper.ToNonStreamingResponse(model, cleanedContent, stats, requestId);
+
+        // Fallback to inline token counts if Stats() didn't return usage
+        if (response.Usage == null && lastChunk != null)
+        {
+            response.Usage = ChatResponseMapper.MapUsageFromResponse(lastChunk);
+        }
+
         await context.Response.WriteAsJsonAsync(response);
     }
 

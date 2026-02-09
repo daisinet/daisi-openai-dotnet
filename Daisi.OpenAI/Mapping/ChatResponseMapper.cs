@@ -76,4 +76,21 @@ public static class ChatResponseMapper
             TotalTokens = stats.SessionTokenCount
         };
     }
+
+    /// <summary>
+    /// Map usage from inline token counts in the final SendInferenceResponse chunk.
+    /// Used when Stats() call is not available (e.g., streaming responses).
+    /// </summary>
+    public static OpenAIUsage? MapUsageFromResponse(SendInferenceResponse? lastChunk)
+    {
+        if (lastChunk == null || lastChunk.SessionTokenCount == 0)
+            return null;
+
+        return new OpenAIUsage
+        {
+            PromptTokens = lastChunk.SessionTokenCount - lastChunk.MessageTokenCount,
+            CompletionTokens = lastChunk.MessageTokenCount,
+            TotalTokens = lastChunk.SessionTokenCount
+        };
+    }
 }
