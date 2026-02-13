@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Daisi.OpenAI.Authentication;
 using Daisi.OpenAI.Mapping;
 using Daisi.OpenAI.Models;
 using Daisi.OpenAI.Sessions;
@@ -26,64 +25,29 @@ public static class ChatCompletionsEndpoint
         var request = await context.Request.ReadFromJsonAsync<ChatCompletionRequest>();
         if (request == null)
         {
-            context.Response.StatusCode = 400;
-            await context.Response.WriteAsJsonAsync(new OpenAIErrorWrapper
-            {
-                Error = new OpenAIError
-                {
-                    Message = "Invalid request body.",
-                    Type = "invalid_request_error",
-                    Code = "invalid_request"
-                }
-            });
+            await EndpointHelper.WriteValidationError(context, 400,
+                "Invalid request body.", "invalid_request_error", "invalid_request");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(request.Model))
         {
-            context.Response.StatusCode = 400;
-            await context.Response.WriteAsJsonAsync(new OpenAIErrorWrapper
-            {
-                Error = new OpenAIError
-                {
-                    Message = "The 'model' field is required.",
-                    Type = "invalid_request_error",
-                    Param = "model",
-                    Code = "model_required"
-                }
-            });
+            await EndpointHelper.WriteValidationError(context, 400,
+                "The 'model' field is required.", "invalid_request_error", "model_required", "model");
             return;
         }
 
         if (request.Messages.Count == 0)
         {
-            context.Response.StatusCode = 400;
-            await context.Response.WriteAsJsonAsync(new OpenAIErrorWrapper
-            {
-                Error = new OpenAIError
-                {
-                    Message = "The 'messages' field must contain at least one message.",
-                    Type = "invalid_request_error",
-                    Param = "messages",
-                    Code = "messages_required"
-                }
-            });
+            await EndpointHelper.WriteValidationError(context, 400,
+                "The 'messages' field must contain at least one message.", "invalid_request_error", "messages_required", "messages");
             return;
         }
 
-        var credential = context.Items[BearerTokenAuthHandler.CredentialItemKey] as DaisiCredential;
-        if (credential == null)
+        if (!EndpointHelper.TryGetCredential(context, out var credential))
         {
-            context.Response.StatusCode = 401;
-            await context.Response.WriteAsJsonAsync(new OpenAIErrorWrapper
-            {
-                Error = new OpenAIError
-                {
-                    Message = "Authentication credential not found.",
-                    Type = "authentication_error",
-                    Code = "auth_error"
-                }
-            });
+            await EndpointHelper.WriteValidationError(context, 401,
+                "Authentication credential not found.", "authentication_error", "auth_error");
             return;
         }
 
@@ -111,17 +75,7 @@ public static class ChatCompletionsEndpoint
         }
         finally
         {
-            if (inferenceClient != null)
-            {
-                try
-                {
-                    await inferenceClient.CloseAsync();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Error closing inference client");
-                }
-            }
+            await EndpointHelper.CloseInferenceClient(inferenceClient, logger);
         }
     }
 
@@ -145,17 +99,7 @@ public static class ChatCompletionsEndpoint
         }
 
         var cleanedContent = ContentExtractor.CleanResponseContent(contentBuilder.ToString());
-
-        InferenceStatsResponse? stats = null;
-        try
-        {
-            stats = inferenceClient.Stats(new InferenceStatsRequest());
-        }
-        catch
-        {
-            // Stats are optional; don't fail the response
-        }
-
+        var stats = EndpointHelper.TryGetStats(inferenceClient);
         var response = ChatResponseMapper.ToNonStreamingResponse(model, cleanedContent, stats, requestId);
 
         // Fallback to inline token counts if Stats() didn't return usage
@@ -174,18 +118,11 @@ public static class ChatCompletionsEndpoint
         string requestId,
         ILogger logger)
     {
-        context.Response.ContentType = "text/event-stream";
-        context.Response.Headers.CacheControl = "no-cache";
-        context.Response.Headers.Connection = "keep-alive";
-
-        var jsonOptions = new JsonSerializerOptions
-        {
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        };
+        EndpointHelper.PrepareSseResponse(context);
 
         // Send initial chunk with role
         var initialChunk = ChatResponseMapper.ToStreamingChunk(model, null, null, requestId, includeRole: true);
-        await WriteSseEvent(context.Response, JsonSerializer.Serialize(initialChunk, jsonOptions));
+        await EndpointHelper.WriteSseEvent(context.Response, JsonSerializer.Serialize(initialChunk, EndpointHelper.SseJsonOptions));
 
         // For streaming, accumulate raw content and post-process
         // since think/response tags can span multiple chunks
@@ -202,20 +139,14 @@ public static class ChatCompletionsEndpoint
         if (!string.IsNullOrEmpty(cleanedContent))
         {
             var sseChunk = ChatResponseMapper.ToStreamingChunk(model, cleanedContent, null, requestId);
-            await WriteSseEvent(context.Response, JsonSerializer.Serialize(sseChunk, jsonOptions));
+            await EndpointHelper.WriteSseEvent(context.Response, JsonSerializer.Serialize(sseChunk, EndpointHelper.SseJsonOptions));
         }
 
         // Send final chunk with finish_reason
         var finalChunk = ChatResponseMapper.ToStreamingChunk(model, null, "stop", requestId);
-        await WriteSseEvent(context.Response, JsonSerializer.Serialize(finalChunk, jsonOptions));
+        await EndpointHelper.WriteSseEvent(context.Response, JsonSerializer.Serialize(finalChunk, EndpointHelper.SseJsonOptions));
 
         // Send [DONE] marker
-        await WriteSseEvent(context.Response, "[DONE]");
-    }
-
-    private static async Task WriteSseEvent(HttpResponse response, string data)
-    {
-        await response.WriteAsync($"data: {data}\n\n");
-        await response.Body.FlushAsync();
+        await EndpointHelper.WriteSseEvent(context.Response, "[DONE]");
     }
 }

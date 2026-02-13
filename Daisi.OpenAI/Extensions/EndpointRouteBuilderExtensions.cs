@@ -9,7 +9,6 @@ public static class EndpointRouteBuilderExtensions
         ChatCompletionsEndpoint.Map(app);
         CompletionsEndpoint.Map(app);
         ModelsEndpoint.Map(app);
-        EmbeddingsEndpoint.Map(app);
         return app;
     }
 }

@@ -25,7 +25,6 @@ OpenAI Client  -->  Daisi.OpenAI (HTTP/REST)  -->  DAISI Orc (gRPC)  -->  DAISI 
 | `POST` | `/v1/completions` | Legacy text completions |
 | `GET` | `/v1/models` | List available models |
 | `GET` | `/v1/models/{modelId}` | Get a specific model |
-| `POST` | `/v1/embeddings` | Returns 501 (not supported by DAISI) |
 
 ## Getting Started
 
@@ -206,7 +205,6 @@ Daisi.OpenAI/
     ChatCompletionsEndpoint.cs       # POST /v1/chat/completions
     CompletionsEndpoint.cs           # POST /v1/completions
     ModelsEndpoint.cs                # GET /v1/models, GET /v1/models/{model}
-    EmbeddingsEndpoint.cs            # POST /v1/embeddings (501 stub)
 
   Mapping/
     ChatRequestMapper.cs             # OpenAI request -> DAISI inference request
