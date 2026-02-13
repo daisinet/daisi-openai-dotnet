@@ -12,7 +12,7 @@ public static class ChatRequestMapper
         var createRequest = new CreateInferenceRequest
         {
             ModelName = request.Model,
-            ThinkLevel = request.Tools is { Count: > 0 } ? ThinkLevels.BasicWithTools : ThinkLevels.Basic
+            ThinkLevel = request.Tools is { Count: > 0 } ? ThinkLevels.Skilled : ThinkLevels.Basic
         };
 
         // Extract system message as initialization prompt
